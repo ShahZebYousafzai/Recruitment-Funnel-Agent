@@ -10,13 +10,13 @@ Input: Uploaded resumes or LinkedIn profiles.
 Tasks:
 
 
-Extracts key information (skills, experience, education).
+Extracts key information (skills, experience, education). ✅
 
 
-Scores and ranks resumes based on job description fit.
+Scores and ranks resumes based on job description fit. ✅
 
 
-Filters out unqualified candidates.
+Filters out unqualified candidates. ✅
 
 
 Tech: LLM (for extraction), keyword similarity, embedding-based matching.
@@ -29,7 +29,7 @@ Input: Qualified candidate info.
 Tasks:
 
 
-Sends introductory emails.
+Sends introductory emails. ✅
 
 
 Conducts pre-screening Q&A via chat/email.
@@ -121,3 +121,10 @@ Post-interview, Feedback Agent summarizes decisions.
 
 Follow-Up Agent communicates outcomes.
 
+## Next Steps (we'll implement these incrementally):
+
+Email configuration (SMTP settings, credentials) ✅
+Actual email sending functionality ✅
+Screening questions generation and sending
+Response processing and analysis
+Conversation tracking and memory
