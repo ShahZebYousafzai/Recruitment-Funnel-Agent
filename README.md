@@ -123,8 +123,8 @@ Follow-Up Agent communicates outcomes.
 
 ## Next Steps (we'll implement these incrementally):
 
-Email configuration (SMTP settings, credentials) ✅
-Actual email sending functionality ✅
-Screening questions generation and sending
-Response processing and analysis
-Conversation tracking and memory
+* Email configuration (SMTP settings, credentials) ✅
+* Actual email sending functionality ✅
+* Screening questions generation and sending
+* Response processing and analysis
+* Conversation tracking and memory
