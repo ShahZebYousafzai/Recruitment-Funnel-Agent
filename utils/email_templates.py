@@ -1,6 +1,5 @@
 # utils/email_templates.py
-from typing import Dict, Any
-from datetime import datetime
+from typing import Dict
 
 class EmailTemplates:
     """Collection of email templates for different recruitment scenarios"""

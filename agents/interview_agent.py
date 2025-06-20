@@ -1,4 +1,4 @@
-# agents/interview_agent.py
+# agents/interview_agent.py - UPDATED WITH RESPONSE PROCESSING
 from typing import Dict, List, Optional
 import smtplib
 from email.mime.text import MIMEText
@@ -7,19 +7,11 @@ from datetime import datetime, timedelta
 import json
 from langchain.prompts import PromptTemplate
 from langchain.schema import HumanMessage
+import re
 
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from typing import Dict, List, Optional
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timedelta
-import json
-from langchain.prompts import PromptTemplate
-from langchain.schema import HumanMessage
 
 from agents.base_agent import BaseAgent
 from models.candidate import Candidate, CandidateStatus
@@ -55,16 +47,11 @@ class InterviewAgent(BaseAgent):
         else:
             self.log("Email service disabled - check configuration")
         
-    def _setup_email_config(self) -> Dict:
-        """Setup email configuration - we'll implement this step by step"""
-        # For now, return empty config - we'll add SMTP settings later
-        return {
-            'smtp_server': 'smtp.gmail.com',
-            'smtp_port': 587,
-            'email': '',  # Will be set from environment
-            'password': ''  # Will be set from environment
-        }
-    
+        # Initialize response processing attributes
+        self.response_analyses = {}
+        self.manual_review_queue = {}
+        self.screening_questions_data = {}
+        
     def execute(self, input_data: Dict) -> Dict:
         """
         Main execution method for interview agent
@@ -92,7 +79,7 @@ class InterviewAgent(BaseAgent):
                 return self._send_screening_questions(candidate, job_description)
             elif action == 'process_response':
                 response_text = input_data.get('response_text', '')
-                return self._process_candidate_response(candidate, response_text)
+                return self._process_candidate_response(candidate, response_text, job_description)
             else:
                 raise ValueError(f"Unknown action: {action}")
                 
@@ -229,10 +216,6 @@ Recruitment Team""",
         }
     
     def _send_screening_questions(self, candidate: Candidate, job_description: JobDescription) -> Dict:
-        """Send screening questions to candidate (placeholder for now)"""
-        # We'll implement this in the next step
-        self.log(f"Preparing screening questions for {candidate.name}")
-    def _send_screening_questions(self, candidate: Candidate, job_description: JobDescription) -> Dict:
         """Generate and send screening questions to candidate"""
         
         self.log(f"Generating screening questions for {candidate.name}")
@@ -346,9 +329,6 @@ Best regards,
     
     def _store_screening_questions(self, candidate_id: str, questions_data: Dict):
         """Store screening questions data for later reference"""
-        if not hasattr(self, 'screening_questions_data'):
-            self.screening_questions_data = {}
-        
         self.screening_questions_data[candidate_id] = {
             'timestamp': datetime.now().isoformat(),
             'questions_data': questions_data
@@ -356,36 +336,237 @@ Best regards,
     
     def get_screening_questions(self, candidate_id: str) -> Dict:
         """Get stored screening questions for a candidate"""
-        if hasattr(self, 'screening_questions_data'):
-            return self.screening_questions_data.get(candidate_id, {})
-        return {}
+        return self.screening_questions_data.get(candidate_id, {})
     
-    def generate_custom_questions(self, candidate: Candidate, job_description: JobDescription,
-                                categories: List[str] = None, num_questions: int = 5) -> Dict:
-        """Generate custom screening questions with specific parameters"""
+    def _process_candidate_response(self, candidate: Candidate, response_text: str, 
+                                   job_description: JobDescription = None) -> Dict:
+        """Process and analyze candidate's response to screening questions"""
         
-        return self.questions_generator.generate_screening_questions(
-            candidate=candidate,
-            job_description=job_description,
-            num_questions=num_questions,
-            categories=categories or ['technical', 'experience', 'motivation']
-        )
-    
-    def _process_candidate_response(self, candidate: Candidate, response_text: str) -> Dict:
-        """Process candidate's response (placeholder for now)"""
-        # We'll implement this in the next step
         self.log(f"Processing response from {candidate.name}")
-        return {'status': 'response_processed'}
-    
-    def test_email_configuration(self) -> Dict:
-        """Test email configuration and connectivity"""
-        if not self.email_enabled:
+        
+        try:
+            # Import the response analyzer
+            from utils.response_analyzer import ResponseAnalyzer
+            
+            # Initialize response analyzer
+            analyzer = ResponseAnalyzer(llm=self.llm)
+            
+            # Get the original questions for this candidate
+            questions_data = self.get_screening_questions(candidate.id)
+            original_questions = questions_data.get('questions_data', {}).get('questions', [])
+            
+            if not original_questions:
+                self.log(f"Warning: No original questions found for {candidate.name}")
+                return {
+                    'status': 'error',
+                    'error': 'No original questions found for analysis',
+                    'candidate_id': candidate.id
+                }
+            
+            # Prepare data for analysis
+            candidate_profile = {
+                'id': candidate.id,
+                'name': candidate.name,
+                'skills': candidate.skills,
+                'experience_years': candidate.experience_years,
+                'education': candidate.education
+            }
+            
+            job_requirements = {
+                'title': job_description.title if job_description else 'Unknown Position',
+                'required_skills': job_description.required_skills if job_description else [],
+                'description': job_description.description if job_description else ''
+            }
+            
+            # Analyze the response
+            analysis = analyzer.analyze_response(
+                candidate_response=response_text,
+                original_questions=original_questions,
+                candidate_profile=candidate_profile,
+                job_requirements=job_requirements
+            )
+            
+            # Update candidate status based on analysis
+            self._update_candidate_from_analysis(candidate, analysis)
+            
+            # Generate summary
+            summary = analyzer.generate_response_summary(analysis)
+            
+            # Store analysis in conversation history
+            self._store_response_analysis(candidate.id, analysis, response_text)
+            
+            self.log(f"✅ Response analysis completed for {candidate.name}. Score: {analysis.overall_score:.2f}")
+            
             return {
-                'success': False,
-                'message': 'Email service is not configured'
+                'status': 'response_analyzed',
+                'candidate_id': candidate.id,
+                'analysis': analysis,
+                'summary': summary,
+                'recommendation': analysis.recommendation,
+                'overall_score': analysis.overall_score,
+                'fit_level': analysis.fit_level.value,
+                'next_action': self._determine_next_action(analysis)
+            }
+            
+        except Exception as e:
+            self.log(f"❌ Error processing response from {candidate.name}: {str(e)}")
+            return {
+                'status': 'processing_error',
+                'error': str(e),
+                'candidate_id': candidate.id,
+                'next_action': 'manual_review'
+            }
+    
+    def process_email_response(self, candidate: Candidate, email_content: str, 
+                              job_description: JobDescription = None,
+                              email_subject: str = "", sender_email: str = "") -> Dict:
+        """
+        Process an email response from a candidate
+        
+        Args:
+            candidate: Candidate object
+            email_content: The email body content
+            job_description: Job description for context
+            email_subject: Email subject line
+            sender_email: Sender's email for verification
+            
+        Returns:
+            Dict with processing results
+        """
+        
+        self.log(f"Processing email response from {candidate.name}")
+        
+        # Verify sender email matches candidate
+        if sender_email and sender_email.lower() != candidate.email.lower():
+            self.log(f"⚠️ Email mismatch: Expected {candidate.email}, got {sender_email}")
+            return {
+                'status': 'email_mismatch',
+                'error': f'Email sender ({sender_email}) does not match candidate email ({candidate.email})',
+                'candidate_id': candidate.id
             }
         
-        return self.email_service.test_connection()
+        # Clean email content (remove signatures, quoted text, etc.)
+        cleaned_content = self._clean_email_content(email_content)
+        
+        # Process the response
+        result = self._process_candidate_response(candidate, cleaned_content, job_description)
+        
+        # Add email metadata
+        result.update({
+            'email_subject': email_subject,
+            'sender_email': sender_email,
+            'original_content': email_content,
+            'cleaned_content': cleaned_content
+        })
+        
+        return result
+    
+    def _clean_email_content(self, email_content: str) -> str:
+        """Clean email content by removing signatures, quoted replies, etc."""
+        
+        # Remove common email signatures and footers
+        patterns_to_remove = [
+            r'(Best regards|Sincerely|Thanks|Thank you|Regards|Best).*$',
+            r'Sent from my.*$',
+            r'On .* wrote:.*$',
+            r'From:.*$',
+            r'To:.*$',
+            r'Subject:.*$',
+            r'Date:.*$',
+            r'-----Original Message-----.*$',
+            r'>.*$',  # Quoted lines starting with >
+        ]
+        
+        cleaned = email_content
+        for pattern in patterns_to_remove:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+        
+        # Remove excessive whitespace
+        cleaned = re.sub(r'\n\s*\n', '\n\n', cleaned)
+        cleaned = re.sub(r' +', ' ', cleaned)
+        
+        return cleaned.strip()
+    
+    def _update_candidate_from_analysis(self, candidate: Candidate, analysis) -> None:
+        """Update candidate object based on response analysis"""
+        
+        # Update screening score with response analysis
+        candidate.screening_score = analysis.overall_score
+        
+        # Update status based on analysis
+        if analysis.overall_score >= 0.8 and analysis.fit_level.value in ['strong_fit', 'good_fit']:
+            candidate.status = CandidateStatus.QUALIFIED
+        elif analysis.overall_score >= 0.6:
+            candidate.status = CandidateStatus.SCREENED  # Needs further review
+        else:
+            candidate.status = CandidateStatus.REJECTED
+        
+        # Update feedback with analysis summary
+        feedback_parts = []
+        
+        if analysis.strengths:
+            feedback_parts.append(f"Strengths: {'; '.join(analysis.strengths[:3])}")
+        
+        if analysis.concerns:
+            feedback_parts.append(f"Concerns: {'; '.join(analysis.concerns[:3])}")
+        
+        if analysis.red_flags:
+            feedback_parts.append(f"Red Flags: {'; '.join(analysis.red_flags)}")
+        
+        candidate.screening_feedback = " | ".join(feedback_parts)
+        
+        candidate.updated_at = datetime.now()
+    
+    def _store_response_analysis(self, candidate_id: str, analysis, response_text: str):
+        """Store response analysis in conversation history"""
+        
+        self.response_analyses[candidate_id] = {
+            'timestamp': datetime.now().isoformat(),
+            'response_text': response_text,
+            'analysis': analysis,
+            'processed': True
+        }
+    
+    def _determine_next_action(self, analysis) -> str:
+        """Determine the next action based on analysis results"""
+        
+        if analysis.overall_score >= 0.8:
+            return 'schedule_interview'
+        elif analysis.overall_score >= 0.6:
+            return 'follow_up_questions'
+        elif analysis.overall_score >= 0.4:
+            return 'manual_review'
+        else:
+            return 'send_rejection'
+    
+    def _flag_for_manual_review(self, candidate: Candidate, analysis) -> Dict:
+        """Flag candidate for manual review"""
+        
+        self.log(f"🔍 Flagging {candidate.name} for manual review - borderline case")
+        
+        # Store flag in memory for HR review
+        self.manual_review_queue[candidate.id] = {
+            'candidate': candidate,
+            'analysis': analysis,
+            'flagged_at': datetime.now().isoformat(),
+            'reason': 'Borderline screening response - needs human assessment',
+            'priority': 'medium'
+        }
+        
+        return {
+            'action_taken': 'flagged_for_review',
+            'next_step': 'manual_review',
+            'review_reason': 'Borderline case requiring human judgment',
+            'priority': 'medium'
+        }
+    
+    def get_manual_review_queue(self) -> List[Dict]:
+        """Get list of candidates flagged for manual review"""
+        return list(self.manual_review_queue.values())
+    
+    def get_response_analysis(self, candidate_id: str) -> Dict:
+        """Get stored response analysis for a candidate"""
+        return self.response_analyses.get(candidate_id, {})
     
     def _store_email_in_history(self, candidate_id: str, email_type: str, email_content: Dict, email_result: Dict):
         """Store email in conversation history"""
@@ -443,6 +624,16 @@ Best regards,
             }
             self.log(f"❌ Error sending custom email to {candidate.name}: {str(e)}")
             return error_result
+    
+    def test_email_configuration(self) -> Dict:
+        """Test email configuration and connectivity"""
+        if not self.email_enabled:
+            return {
+                'success': False,
+                'message': 'Email service is not configured'
+            }
+        
+        return self.email_service.test_connection()
     
     def send_test_email(self, test_email: str) -> Dict:
         """Send a test email to verify email functionality"""

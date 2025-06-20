@@ -1,6 +1,5 @@
 # agents/resume_screener.py
 from typing import List, Dict, Tuple
-import numpy as np
 from langchain.prompts import PromptTemplate
 from langchain.schema import HumanMessage
 from sklearn.feature_extraction.text import TfidfVectorizer
