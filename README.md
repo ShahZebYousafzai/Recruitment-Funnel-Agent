@@ -125,6 +125,6 @@ Follow-Up Agent communicates outcomes.
 
 * Email configuration (SMTP settings, credentials) ✅
 * Actual email sending functionality ✅
-* Screening questions generation and sending
+* Screening questions generation and sending ✅
 * Response processing and analysis
 * Conversation tracking and memory
