@@ -1,4 +1,4 @@
-# models/candidate.py
+# models/candidate.py - UPDATED VERSION
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
 from datetime import datetime
@@ -17,7 +17,7 @@ class Candidate(BaseModel):
     name: str
     email: str
     phone: Optional[str] = None
-    resume_text: str
+    resume_text: str = Field(default="Resume content not provided")  # Fixed: made optional with default
     skills: List[str] = Field(default_factory=list)
     experience_years: float = 0.0
     education: List[str] = Field(default_factory=list)

@@ -26,6 +26,7 @@ from models.candidate import Candidate, CandidateStatus
 from models.job_description import JobDescription
 from config.settings import settings
 from utils.email_service import EmailService
+from utils.screening_questions_generator import ScreeningQuestionsGenerator
 
 class InterviewAgent(BaseAgent):
     """Agent responsible for conducting initial candidate outreach and screening"""
@@ -43,6 +44,9 @@ class InterviewAgent(BaseAgent):
             use_tls=settings.EMAIL_USE_TLS,
             from_name=settings.EMAIL_FROM_NAME
         )
+        
+        # Initialize screening questions generator
+        self.questions_generator = ScreeningQuestionsGenerator(llm=self.llm)
         
         # Check if email is properly configured
         self.email_enabled = settings.validate_email_config()
@@ -228,7 +232,144 @@ Recruitment Team""",
         """Send screening questions to candidate (placeholder for now)"""
         # We'll implement this in the next step
         self.log(f"Preparing screening questions for {candidate.name}")
-        return {'status': 'questions_prepared'}
+    def _send_screening_questions(self, candidate: Candidate, job_description: JobDescription) -> Dict:
+        """Generate and send screening questions to candidate"""
+        
+        self.log(f"Generating screening questions for {candidate.name}")
+        
+        try:
+            # Generate personalized screening questions
+            questions_data = self.questions_generator.generate_screening_questions(
+                candidate=candidate,
+                job_description=job_description,
+                num_questions=5,
+                categories=['technical', 'experience', 'motivation', 'availability']
+            )
+            
+            # Format questions for email
+            questions_text = self.questions_generator.format_questions_for_email(questions_data)
+            
+            # Create email content
+            email_content = self._create_screening_questions_email(
+                candidate, job_description, questions_text, questions_data
+            )
+            
+            result = {
+                'status': 'questions_generated',
+                'questions_data': questions_data,
+                'email_content': email_content,
+                'candidate_id': candidate.id,
+                'next_action': 'process_response'
+            }
+            
+            # Send email if enabled
+            if self.email_enabled:
+                try:
+                    # Add signature to email body
+                    body_with_signature = email_content['body'] + f"\n\n{settings.EMAIL_SIGNATURE.format(from_name=settings.EMAIL_FROM_NAME)}"
+                    
+                    email_result = self.email_service.send_email(
+                        to_email=candidate.email,
+                        to_name=candidate.name,
+                        subject=email_content['subject'],
+                        body=body_with_signature
+                    )
+                    
+                    result['email_sent'] = email_result['success']
+                    result['email_status'] = email_result['message']
+                    result['email_timestamp'] = email_result.get('timestamp')
+                    
+                    if email_result['success']:
+                        self.log(f"✅ Screening questions sent to {candidate.name}")
+                        result['status'] = 'questions_sent'
+                        
+                        # Store in conversation history
+                        self._store_email_in_history(candidate.id, 'screening_questions', email_content, email_result)
+                        
+                        # Store questions data for later reference
+                        self._store_screening_questions(candidate.id, questions_data)
+                        
+                    else:
+                        self.log(f"❌ Failed to send screening questions to {candidate.name}")
+                        result['status'] = 'questions_email_failed'
+                        result['error'] = email_result.get('error', 'Unknown error')
+                        
+                except Exception as e:
+                    self.log(f"❌ Error sending screening questions: {str(e)}")
+                    result['email_sent'] = False
+                    result['status'] = 'questions_email_error'
+                    result['error'] = str(e)
+            else:
+                self.log(f"📧 Screening questions generated for {candidate.name} (sending disabled)")
+                result['email_sent'] = False
+                result['email_status'] = 'Email sending is disabled'
+            
+            return result
+            
+        except Exception as e:
+            self.log(f"Error generating screening questions: {str(e)}")
+            return {
+                'status': 'questions_generation_failed',
+                'error': str(e),
+                'candidate_id': candidate.id
+            }
+    
+    def _create_screening_questions_email(self, candidate: Candidate, job_description: JobDescription, 
+                                        questions_text: str, questions_data: Dict) -> Dict:
+        """Create email content for screening questions"""
+        
+        subject = f"Next Steps: {job_description.title} Opportunity - Quick Questions"
+        
+        body = f"""Dear {candidate.name},
+
+Thank you for your interest in the {job_description.title} position at {job_description.company}!
+
+Based on your background and the role requirements, I'd like to move forward with a few screening questions to better understand your experience and interests.
+
+{questions_text}
+
+These questions will help us prepare for our upcoming conversation and ensure we make the best use of our time together.
+
+Please feel free to respond directly to this email with your answers. I'm looking forward to learning more about your experience and discussing how this opportunity aligns with your career goals.
+
+If you have any questions about the role or the process, please don't hesitate to ask!
+
+Best regards,
+{settings.EMAIL_FROM_NAME}
+{job_description.company}"""
+
+        return {
+            'subject': subject,
+            'body': body,
+            'call_to_action': 'Please respond with your answers to the screening questions'
+        }
+    
+    def _store_screening_questions(self, candidate_id: str, questions_data: Dict):
+        """Store screening questions data for later reference"""
+        if not hasattr(self, 'screening_questions_data'):
+            self.screening_questions_data = {}
+        
+        self.screening_questions_data[candidate_id] = {
+            'timestamp': datetime.now().isoformat(),
+            'questions_data': questions_data
+        }
+    
+    def get_screening_questions(self, candidate_id: str) -> Dict:
+        """Get stored screening questions for a candidate"""
+        if hasattr(self, 'screening_questions_data'):
+            return self.screening_questions_data.get(candidate_id, {})
+        return {}
+    
+    def generate_custom_questions(self, candidate: Candidate, job_description: JobDescription,
+                                categories: List[str] = None, num_questions: int = 5) -> Dict:
+        """Generate custom screening questions with specific parameters"""
+        
+        return self.questions_generator.generate_screening_questions(
+            candidate=candidate,
+            job_description=job_description,
+            num_questions=num_questions,
+            categories=categories or ['technical', 'experience', 'motivation']
+        )
     
     def _process_candidate_response(self, candidate: Candidate, response_text: str) -> Dict:
         """Process candidate's response (placeholder for now)"""
