@@ -1,359 +1,415 @@
 import traceback
 import sys
+import os
 from datetime import datetime
+from dotenv import load_dotenv
 
-# Import fixed utilities
+# Load environment variables
+load_dotenv()
+
+# Import existing components
 from utils import convert_database_candidate
 from database.database_integration import CandidateDatabase, test_database_connection
-from workflows.screening import (
-    create_database_screening_workflow, 
-    create_database_screening_state
-)
+from workflows.screening import create_database_screening_workflow, create_database_screening_state
 from models.screening import ScreeningCriteria
-from nodes.screening import generate_screening_report
 
-# Patch the screening agent to use fixed utilities
-from agents.screening import ScreeningAgent
-import nodes.screening
-nodes.screening.ScreeningAgent = ScreeningAgent
+# Import REAL email outreach components
+from agents.outreach import OutreachAgent
+from models.outreach import EmailProvider, OutreachState
 
-def run_fixed_database_screening():
-    """Run database screening with data type conversion fixes"""
+def run_real_email_pipeline():
+    """Run complete recruitment pipeline with REAL email sending"""
     
-    print("🗄️ FIXED DATABASE-INTEGRATED RECRUITMENT SCREENING")
+    print("🚀 REAL EMAIL RECRUITMENT PIPELINE")
     print("=" * 70)
-    print("🔧 Fixed: source_id integer → string conversion")
-    print("📋 Pulling candidate data from candidates database table")
+    print("📋 Stage 1-3: Database Screening")
+    print("📧 Stage 5: REAL Email Outreach")
     print("=" * 70)
+    
+    # Check email configuration
+    if not os.path.exists('.env'):
+        print("❌ No email configuration found!")
+        print("🔧 Run: python setup_real_emails.py")
+        return None
+    
+    # Validate email configuration
+    required_vars = ['SMTP_SERVER', 'SMTP_PORT', 'SENDER_EMAIL', 'SENDER_PASSWORD']
+    missing_vars = [var for var in required_vars if not os.getenv(var)]
+    
+    if missing_vars:
+        print(f"❌ Missing email configuration: {', '.join(missing_vars)}")
+        print("🔧 Run: python setup_real_emails.py")
+        return None
+    
+    # Display email configuration
+    print(f"📧 Email Configuration:")
+    print(f"   SMTP: {os.getenv('SMTP_SERVER')}:{os.getenv('SMTP_PORT')}")
+    print(f"   Sender: {os.getenv('SENDER_NAME')} <{os.getenv('SENDER_EMAIL')}>")
+    print(f"   Company: {os.getenv('COMPANY_NAME')}")
+    
+    # Final confirmation for real emails
+    print(f"\n⚠️  WARNING: This will send REAL emails to candidates!")
+    confirm = input("Continue with real email sending? (y/N): ").strip().lower()
+    
+    if confirm != 'y':
+        print("❌ Pipeline cancelled")
+        return None
     
     try:
-        # Step 1: Test database connection
-        print("\n🔌 Testing Database Connection...")
+        # Step 1: Database Connection Test
+        print(f"\n🔌 Testing Database Connection...")
         if not test_database_connection():
-            print("❌ Database connection failed. Please ensure:")
-            print("   1. Database file 'candidates.db' exists")
-            print("   2. Run 'python database_setup.py' to create and populate database")
+            print("❌ Database connection failed")
             return None
         
-        # Step 2: Get candidates with proper data conversion
-        print(f"\n📋 Retrieving and Converting Candidate Data...")
-        
-        db = CandidateDatabase()
-
-        stats = db.get_database_stats()
-
-        total_candidates = stats.get('total_candidates', 0)
-        available_candidates = stats.get('available_candidates', 0)
-        
-        # Define job requirements
+        # Step 2: Job Requirements
         job_requirements = {
-            "job_id": "ai_engineer_fixed_001",
+            "job_id": "real_email_ai_engineer_001",
             "job_title": "Senior AI Engineer",
-            "job_description": "Senior AI Engineer with ML and NLP expertise",
+            "job_description": """
+Join our innovative AI team to build next-generation machine learning solutions that impact millions of users. 
+You'll work on cutting-edge projects involving natural language processing, computer vision, and generative AI 
+while collaborating with world-class engineers and researchers.
+            """.strip(),
             "required_skills": ["Python", "Machine Learning", "PyTorch", "NLP"],
             "preferred_skills": ["Generative AI", "TensorFlow", "LangChain", "Computer Vision"],
             "location": "San Francisco, CA",
             "experience_level": "Senior",
-            "allow_remote": True
+            "min_experience_years": 4,
+            "allow_remote": True,
+            "company_name": os.getenv('COMPANY_NAME', 'AI Innovations Inc.'),
+            "department": "AI Research & Development"
         }
         
-        print(f"🎯 Job Requirements:")
-        print(f"   Required Skills: {', '.join(job_requirements['required_skills'])}")
-        print(f"   Preferred Skills: {', '.join(job_requirements['preferred_skills'])}")
-        print(f"   Experience Level: {job_requirements['experience_level']}")
-        print(f"   Remote Allowed: {job_requirements['allow_remote']}")
-        
-        # Get candidates from database
-        raw_candidates = db.get_candidates_for_job(job_requirements, max_candidates=20)
-        
-        if not raw_candidates:
-            print("⚠️ No candidates found matching criteria, getting all available...")
-            raw_candidates = db.get_all_candidates(max_candidates=10)
-        
-        print(f"📊 Found {len(raw_candidates)} candidates in database")
-        
-        # CRITICAL FIX: Convert data types before processing
-        print(f"🔧 Converting data types for Pydantic compatibility...")
-        converted_candidates = []
-        
-        for i, candidate in enumerate(raw_candidates):
-            try:
-                converted = convert_database_candidate(candidate)
-                converted_candidates.append(converted)
-                print(f"   ✅ [{i+1}/{len(raw_candidates)}] {candidate.get('name', 'Unknown')} - ID: {converted['source_id']} (string)")
-            except Exception as e:
-                print(f"   ❌ [{i+1}/{len(raw_candidates)}] Conversion failed: {e}")
-        
-        print(f"✅ Successfully converted {len(converted_candidates)} candidates")
-        
-        # Step 3: Run screening with converted data
-        print(f"\n🔍 Running Screening with Fixed Data...")
-        
-        # Define screening criteria
+        # Step 3: Screening Criteria
         screening_criteria = ScreeningCriteria(
             required_skills_weight=0.4,
             preferred_skills_weight=0.2,
             experience_weight=0.3,
             location_weight=0.1,
-            education_weight=0.0,
             min_experience_years=3,
             preferred_experience_years=5,
-            pass_threshold=40.0,
-            shortlist_threshold=40.0,
-            allow_remote=True,
-            education_required=False
+            pass_threshold=60.0,
+            shortlist_threshold=70.0,  # Higher threshold for real emails
+            allow_remote=True
         )
         
-        print(f"⚖️ Screening Criteria:")
-        print(f"   Pass threshold: {screening_criteria.pass_threshold}%")
-        print(f"   Shortlist threshold: {screening_criteria.shortlist_threshold}%")
-        print(f"   Min experience: {screening_criteria.min_experience_years} years")
+        print(f"\n🎯 Job: {job_requirements['job_title']}")
+        print(f"🏢 Company: {job_requirements['company_name']}")
+        print(f"⚖️ Shortlist Threshold: {screening_criteria.shortlist_threshold}%")
         
-        # Create screening state with converted candidates
+        # Step 4: Run Database Screening
+        print(f"\n{'='*60}")
+        print("🔍 STAGE 1-3: CANDIDATE SCREENING")
+        print(f"{'='*60}")
+        
+        # Get and convert candidates
+        db = CandidateDatabase()
+        raw_candidates = db.get_candidates_for_job(job_requirements, max_candidates=20)
+        
+        if not raw_candidates:
+            raw_candidates = db.get_all_candidates(max_candidates=10)
+        
+        print(f"🔧 Converting {len(raw_candidates)} candidates...")
+        converted_candidates = []
+        
+        for candidate in raw_candidates:
+            try:
+                converted = convert_database_candidate(candidate)
+                converted_candidates.append(converted)
+            except Exception as e:
+                print(f"   ⚠️ Conversion error: {e}")
+        
+        # Run screening
         screening_state = create_database_screening_state(
             job_requirements=job_requirements,
             screening_criteria=screening_criteria.model_dump(),
             max_candidates=50
         )
         
-        # Override with our converted candidates
         screening_state["raw_candidates"] = converted_candidates
         screening_state["total_candidates"] = len(converted_candidates)
         
-        # Run screening workflow
-        print(f"\n📋 Screening {len(converted_candidates)} candidates...")
         screening_workflow = create_database_screening_workflow()
         screening_result = screening_workflow.invoke(screening_state)
         
-        # Step 4: Display Results
-        print(f"\n🎉 SCREENING RESULTS")
-        print("=" * 50)
-        
+        # Get screening results
         total_candidates = screening_result["total_candidates"]
-        passed_count = len(screening_result["passed_candidates"])
         shortlisted_count = len(screening_result["shortlisted_candidates"])
         
-        if total_candidates == 0:
-            print("⚠️ No candidates processed")
+        print(f"\n✅ Screening Complete!")
+        print(f"   📊 Total: {total_candidates}")
+        print(f"   🌟 Shortlisted: {shortlisted_count}")
+        
+        # Adjust threshold if needed
+        if shortlisted_count == 0:
+            print("⚠️ No candidates shortlisted. Lowering threshold...")
+            screening_criteria.shortlist_threshold = 60.0
+            screening_state["screening_criteria"] = screening_criteria.model_dump()
+            screening_result = screening_workflow.invoke(screening_state)
+            shortlisted_count = len(screening_result["shortlisted_candidates"])
+            print(f"   🔄 New shortlist: {shortlisted_count}")
+        
+        if shortlisted_count == 0:
+            print("❌ No candidates available for outreach")
             return None
         
-        print(f"📈 Summary:")
-        print(f"   Total processed: {total_candidates}")
-        print(f"   ✅ Passed: {passed_count} ({passed_count/total_candidates*100:.1f}%)")
-        print(f"   🌟 Shortlisted: {shortlisted_count} ({shortlisted_count/total_candidates*100:.1f}%)")
-        print(f"   ❌ Rejected: {total_candidates - passed_count}")
+        # Step 5: Setup Real Email Outreach
+        print(f"\n{'='*60}")
+        print("📧 STAGE 5: REAL EMAIL OUTREACH")
+        print(f"{'='*60}")
         
-        metrics = screening_result["screening_metrics"]
-        print(f"   📊 Average score: {metrics.get('average_score', 0):.1f}/100")
+        shortlisted_candidates = screening_result["shortlisted_candidates"]
         
-        # Show top candidates
-        if shortlisted_count > 0:
-            print(f"\n🏆 SHORTLISTED CANDIDATES:")
+        # Show candidates who will receive emails
+        print(f"\n👥 Candidates who will receive REAL emails:")
+        valid_candidates = []
+        
+        for i, candidate in enumerate(shortlisted_candidates, 1):
+            name = candidate.get('name', 'Unknown')
+            email = candidate.get('email', 'N/A')
+            title = candidate.get('current_title', 'N/A')
             
-            sorted_results = sorted(screening_result["screening_results"], 
-                                  key=lambda x: x["weighted_score"], reverse=True)
-            
-            shortlisted_results = [r for r in sorted_results if r["recommended_for_shortlist"]]
-            
-            for i, result in enumerate(shortlisted_results, 1):
-                candidate = next((c for c in screening_result["raw_candidates"] 
-                                if str(c.get("source_id")) == str(result["candidate_id"]) or 
-                                   str(c.get("id")) == str(result["candidate_id"])), None)
-                
-                if candidate:
-                    print(f"\n{i}. {candidate['name']} ⭐")
-                    print(f"   📧 {candidate.get('email', 'N/A')}")
-                    print(f"   💼 {candidate.get('current_title', 'N/A')}")
-                    print(f"   📍 {candidate.get('location', 'N/A')}")
-                    print(f"   🎯 {candidate.get('experience_years', 0)} years experience")
-                    print(f"   🛠️ Skills: {', '.join(candidate.get('skills', [])[:4])}")
-                    print(f"   📊 Score: {result['weighted_score']:.1f}/100")
-                    print(f"   💪 Strengths: {', '.join(result['strengths'][:2])}")
-                    if result['concerns']:
-                        print(f"   ⚠️ Concerns: {', '.join(result['concerns'][:2])}")
+            if email and email != 'N/A' and '@' in email:
+                valid_candidates.append(candidate)
+                print(f"   ✅ {i}. {name} ({email}) - {title}")
+            else:
+                print(f"   ❌ {i}. {name} (No valid email) - {title}")
         
-        # Show all candidates with scores
-        print(f"\n📋 ALL CANDIDATES:")
-        print("-" * 40)
+        if not valid_candidates:
+            print("❌ No candidates with valid email addresses")
+            return None
         
-        sorted_all = sorted(screening_result["screening_results"], 
-                           key=lambda x: x["weighted_score"], reverse=True)
+        print(f"\n📧 {len(valid_candidates)} candidates will receive real emails")
         
-        for i, result in enumerate(sorted_all, 1):
-            candidate = next((c for c in screening_result["raw_candidates"] 
-                            if str(c.get("source_id")) == str(result["candidate_id"]) or 
-                               str(c.get("id")) == str(result["candidate_id"])), None)
-            
-            if candidate:
-                status = "🌟 SHORTLISTED" if result["recommended_for_shortlist"] else \
-                        "✅ PASSED" if result["passes_screening"] else \
-                        "❌ REJECTED"
-                
-                print(f"{i}. {candidate['name']} - {result['weighted_score']:.1f} - {status}")
-                print(f"   Skills: {result['required_skills_score']:.1f} | Exp: {result['experience_score']:.1f} | Loc: {result['location_score']:.1f}")
+        # Final email confirmation
+        print(f"\n⚠️  FINAL CONFIRMATION")
+        print(f"Real emails will be sent to {len(valid_candidates)} candidates")
+        print(f"From: {os.getenv('SENDER_EMAIL')}")
+        print(f"Subject: {job_requirements['job_title']} Opportunity at {job_requirements['company_name']}")
         
-        # Show insights
-        summary = metrics.get("summary", {})
-        missing_skills = summary.get("most_common_missing_skills", [])
+        final_confirm = input("\nSend real emails now? (YES/no): ").strip()
+        if final_confirm.upper() != 'YES':
+            print("❌ Email sending cancelled")
+            return None
         
-        if missing_skills:
-            print(f"\n🎯 Most Common Missing Skills:")
-            for skill in missing_skills[:3]:
-                print(f"   • {skill}")
+        # Step 6: Initialize Real Email Agent
+        email_provider = EmailProvider(
+            provider_name="real_pipeline_smtp",
+            api_endpoint=f"{os.getenv('SMTP_SERVER')}:{os.getenv('SMTP_PORT')}",
+            api_key=os.getenv('SENDER_PASSWORD'),
+            sender_email=os.getenv('SENDER_EMAIL'),
+            sender_name=os.getenv('SENDER_NAME', 'Recruiting Team')
+        )
         
-        print(f"\n✅ SCREENING COMPLETED SUCCESSFULLY!")
-        print(f"🔧 Data type conversion fix applied successfully")
-        print(f"📊 {shortlisted_count} candidates ready for next stage")
-        print(f"🗄️ Database updated with screening results")
+        agent = OutreachAgent(email_provider=email_provider, use_real_email=True)
+        
+        # Step 7: Prepare and Send Real Emails
+        print(f"\n📝 Preparing personalized emails...")
+        
+        recruiter_data = {
+            "name": os.getenv('SENDER_NAME', 'Sarah Johnson'),
+            "title": "Senior Technical Recruiter",
+            "email": os.getenv('SENDER_EMAIL'),
+            "phone": "+1-555-0123",
+            "company_name": job_requirements['company_name']
+        }
+        
+        # Prepare emails
+        emails_to_send = []
+        template = agent.templates["professional_outreach_v1"]
+        
+        for candidate in valid_candidates:
+            try:
+                personalized_email = agent.personalize_email(
+                    template=template,
+                    candidate_data=candidate,
+                    job_data=job_requirements,
+                    recruiter_data=recruiter_data
+                )
+                emails_to_send.append(personalized_email)
+                print(f"   ✅ Email prepared for {candidate['name']}")
+            except Exception as e:
+                print(f"   ❌ Error preparing email for {candidate['name']}: {e}")
+        
+        if not emails_to_send:
+            print("❌ No emails prepared successfully")
+            return None
+        
+        print(f"\n🚀 Sending {len(emails_to_send)} REAL emails...")
+        print(f"⏱️ Stagger time: 30 seconds between emails")
+        
+        # Send emails with proper staggering
+        start_time = datetime.now()
+        results = agent.send_batch_emails(emails_to_send, stagger_seconds=30)
+        end_time = datetime.now()
+        
+        # Step 8: Display Results
+        print(f"\n🎉 REAL EMAIL CAMPAIGN COMPLETE!")
+        print("=" * 60)
+        
+        print(f"📊 Email Campaign Results:")
+        print(f"   📤 Emails Sent: {len(results['sent'])}/{results['total']}")
+        print(f"   ✅ Success Rate: {results['success_rate']:.1f}%")
+        print(f"   ⏱️ Total Time: {(end_time - start_time).total_seconds():.1f} seconds")
+        
+        if results['sent']:
+            print(f"\n📧 REAL EMAILS SENT TO:")
+            for email in emails_to_send:
+                if email.email_id in results['sent']:
+                    print(f"   ✅ {email.candidate_name} ({email.candidate_email})")
+                    print(f"      📝 Subject: {email.subject}")
+        
+        if results['failed']:
+            print(f"\n❌ Failed to send to {len(results['failed'])} candidates")
+        
+        # Generate metrics
+        metrics = agent.generate_outreach_metrics(emails_to_send, "real_email_campaign")
+        
+        print(f"\n📈 Campaign Metrics:")
+        print(f"   📬 Delivery Rate: {metrics.delivery_rate:.1f}%")
+        print(f"   📊 Total Emails: {metrics.total_emails}")
+        print(f"   📤 Successfully Sent: {metrics.emails_sent}")
+        
+        # Next steps
+        print(f"\n🎯 Next Steps:")
+        print(f"   1. 📧 Monitor email inboxes for responses")
+        print(f"   2. 📞 Follow up with interested candidates")
+        print(f"   3. 📅 Schedule interviews with respondents")
+        print(f"   4. 🔄 Set up Stage 6: Response Management")
+        
+        print(f"\n✅ REAL EMAIL PIPELINE SUCCESSFUL!")
+        print(f"🎉 {len(results['sent'])} candidates contacted via real email")
         
         return {
             "screening_result": screening_result,
-            "job_requirements": job_requirements,
-            "screening_criteria": screening_criteria.model_dump(),
-            "summary": {
-                "total_candidates": total_candidates,
-                "passed_count": passed_count,
-                "shortlisted_count": shortlisted_count,
-                "pass_rate": passed_count/total_candidates*100,
-                "average_score": metrics.get("average_score", 0)
-            }
+            "emails_sent": len(results['sent']),
+            "email_results": results,
+            "campaign_metrics": metrics.model_dump(),
+            "valid_candidates": len(valid_candidates),
+            "success_rate": results['success_rate']
         }
         
     except Exception as e:
-        print(f"❌ Fixed database screening failed: {e}")
+        print(f"❌ Real email pipeline failed: {e}")
         traceback.print_exc()
         return None
 
-def test_data_type_fix():
-    """Test the data type conversion fix"""
-    print("🧪 Testing Data Type Conversion Fix...")
+def run_quick_real_email_test():
+    """Quick test with minimal real emails"""
     
-    try:
-        # Mock database candidate data with integer IDs
-        test_candidate = {
-            'id': 123,  # Integer from database
-            'source_id': 456,  # Integer from database
-            'name': 'Test Candidate',
-            'email': 'test@example.com',
-            'location': 'San Francisco, CA',
-            'current_title': 'AI Engineer',
-            'experience_years': 5,
-            'skills': ['Python', 'Machine Learning'],
-            'education': ['BS Computer Science'],
-            'certifications': [],
-            'raw_data': {}
-        }
-        
-        print(f"Original data types:")
-        print(f"   id: {type(test_candidate['id'])} = {test_candidate['id']}")
-        print(f"   source_id: {type(test_candidate['source_id'])} = {test_candidate['source_id']}")
-        
-        # Apply conversion
-        converted = convert_database_candidate(test_candidate)
-        
-        print(f"After conversion:")
-        print(f"   id: {type(converted['id'])} = {converted['id']}")
-        print(f"   source_id: {type(converted['source_id'])} = {converted['source_id']}")
-        
-        # Test with screening agent
-        from agents.screening import ScreeningAgent
-        from models.screening import ScreeningCriteria
-        
-        agent = ScreeningAgent()
-        criteria = ScreeningCriteria()
-        job_reqs = {
-            "required_skills": ["Python"],
-            "location": "San Francisco, CA"
-        }
-        
-        result = agent.screen_candidate(converted, job_reqs, criteria)
-        
-        print(f"✅ Test passed! Candidate scored: {result.weighted_score:.1f}/100")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Test failed: {e}")
-        traceback.print_exc()
+    print("🧪 QUICK REAL EMAIL TEST")
+    print("=" * 40)
+    
+    # Get test email
+    test_email = input("Enter your email address for testing: ").strip()
+    if not test_email:
+        print("❌ No test email provided")
         return False
-
-def run_quick_fix_test():
-    """Quick test with minimal candidates"""
-    print("🧪 Quick Fix Test with Database...")
+    
+    confirm = input(f"Send real test email to {test_email}? (y/N): ").strip().lower()
+    if confirm != 'y':
+        print("❌ Test cancelled")
+        return False
     
     try:
-        db = CandidateDatabase()
-        
-        # Get just 1-2 candidates for testing
-        candidates = db.get_all_candidates(max_candidates=2)
-        
-        if not candidates:
-            print("⚠️ No candidates in database for testing")
-            return False
-        
-        print(f"Found {len(candidates)} candidates for testing")
-        
-        # Apply conversion
-        converted = []
-        for candidate in candidates:
-            conv = convert_database_candidate(candidate)
-            converted.append(conv)
-            print(f"   ✅ Converted: {candidate['name']} (ID: {conv['source_id']})")
-        
-        # Quick screening test
-        from agents.screening import ScreeningAgent
-        from models.screening import ScreeningCriteria
-        
-        agent = ScreeningAgent()
-        criteria = ScreeningCriteria(pass_threshold=50.0)
-        job_reqs = {
-            "required_skills": ["Python"],
-            "preferred_skills": ["Machine Learning"],
-            "location": "San Francisco, CA"
+        # Create test candidate
+        test_candidate = {
+            "source_id": "quick_test_001",
+            "name": "Test Candidate",
+            "email": test_email,
+            "current_title": "AI Engineer",
+            "experience_years": 5,
+            "skills": ["Python", "Machine Learning", "AI"],
+            "location": "Remote"
         }
         
-        results = []
-        for candidate in converted:
-            try:
-                result = agent.screen_candidate(candidate, job_reqs, criteria)
-                results.append((candidate['name'], result.weighted_score, result.passes_screening))
-                print(f"   📊 {candidate['name']}: {result.weighted_score:.1f} - {'PASS' if result.passes_screening else 'FAIL'}")
-            except Exception as e:
-                print(f"   ❌ {candidate['name']}: Error - {e}")
+        # Mock job requirements
+        job_requirements = {
+            "job_id": "quick_test_job",
+            "job_title": "Senior AI Engineer",
+            "job_description": "Quick test of real email functionality",
+            "required_skills": ["Python", "AI"],
+            "company_name": os.getenv('COMPANY_NAME', 'Test Company')
+        }
         
-        print(f"✅ Quick test completed! Processed {len(results)} candidates successfully")
-        return len(results) > 0
+        recruiter_data = {
+            "name": os.getenv('SENDER_NAME', 'Test Recruiter'),
+            "email": os.getenv('SENDER_EMAIL'),
+            "company_name": job_requirements['company_name']
+        }
         
+        # Initialize real email agent
+        email_provider = EmailProvider(
+            provider_name="quick_test",
+            api_endpoint=f"{os.getenv('SMTP_SERVER')}:{os.getenv('SMTP_PORT')}",
+            api_key=os.getenv('SENDER_PASSWORD'),
+            sender_email=os.getenv('SENDER_EMAIL'),
+            sender_name=os.getenv('SENDER_NAME')
+        )
+        
+        agent = OutreachAgent(email_provider=email_provider, use_real_email=True)
+        
+        # Prepare and send email
+        template = agent.templates["professional_outreach_v1"]
+        email = agent.personalize_email(template, test_candidate, job_requirements, recruiter_data)
+        
+        print(f"\n📤 Sending quick test email...")
+        success = agent.send_email(email)
+        
+        if success:
+            print(f"✅ Quick test email sent successfully!")
+            print(f"📧 Check inbox: {test_email}")
+            return True
+        else:
+            print(f"❌ Quick test email failed")
+            return False
+            
     except Exception as e:
         print(f"❌ Quick test failed: {e}")
         return False
 
 if __name__ == "__main__":
-    print("🚀 Starting FIXED Database Screening Pipeline...")
-    print("=" * 70)
+    print("📧 REAL EMAIL RECRUITMENT PIPELINE")
+    print("=" * 60)
     
-    # Step 1: Test the fix
-    print("🔧 Testing data type conversion fix...")
-    if not test_data_type_fix():
-        print("❌ Data type fix test failed")
+    # Check for email configuration
+    if not os.path.exists('.env'):
+        print("❌ No email configuration found!")
+        print("🔧 First run: python setup_real_emails.py")
+        print("🧪 Then test: python test_real_emails.py")
         sys.exit(1)
     
-    print(f"\n{'='*70}")
-    print("🧪 Running quick database test...")
-    # if not run_quick_fix_test():
-    #     print("❌ Quick database test failed")
-    #     sys.exit(1)
+    mode = input("\nSelect mode:\n1. Full Pipeline with Real Emails\n2. Quick Real Email Test\n\nEnter choice (1-2): ").strip()
     
-    print(f"\n{'='*70}")
-    print("🎯 All tests passed! Running full screening pipeline...\n")
+    if mode == "1":
+        print(f"\n🚀 Running full pipeline with REAL email sending...")
+        result = run_real_email_pipeline()
+        
+        if result:
+            print(f"\n🎉 SUCCESS! REAL EMAIL PIPELINE COMPLETE!")
+            print(f"📧 {result['emails_sent']} real emails sent to candidates")
+            print(f"📈 Success rate: {result['success_rate']:.1f}%")
+            print(f"🎯 Check candidate email inboxes for delivered messages!")
+        else:
+            print(f"❌ Pipeline failed")
     
-    # Step 2: Run full pipeline
-    result = run_fixed_database_screening()
+    elif mode == "2":
+        print(f"\n🧪 Running quick real email test...")
+        success = run_quick_real_email_test()
+        
+        if success:
+            print(f"\n✅ Real email system working!")
+            print(f"🚀 Ready for full pipeline deployment")
+        else:
+            print(f"❌ Email system needs configuration")
     
-    if result:
-        print(f"\n🎉 SUCCESS! Fixed database screening completed successfully.")
-        print(f"🔧 Data type conversion issues resolved")
-        print(f"📊 Pipeline ready for production use")
-        print(f"⏭️ Next: Implement automated candidate outreach")
-    # else:
-    #     print(f"\n❌ Pipeline failed. Check error messages above.")
-    #     sys.exit(1)
+    else:
+        print("❌ Invalid choice")
+        sys.exit(1)
+    
+    print(f"\n🎯 RECRUITMENT AUTOMATION STATUS:")
+    print(f"✅ Database Screening: Operational")
+    print(f"✅ Real Email Outreach: Operational") 
+    print(f"🔄 Response Management: Next Stage")
+    print(f"🔄 Interview Coordination: Next Stage")

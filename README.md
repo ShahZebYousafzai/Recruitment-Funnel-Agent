@@ -2,19 +2,19 @@
 
 ## 1. Funnel Stages Overview
 
-### Stage 1: **Candidate Sourcing**
+### Stage 1: **Candidate Sourcing** (Pending)
 - **Input**: Job requirements, sourcing channels
 - **Process**: Search and collect candidate profiles
 - **Output**: Raw candidate pool
 - **Decision Points**: Channel effectiveness, candidate volume
 
-### Stage 2: **Initial Screening**
+### Stage 2: **Initial Screening** (✅ Completed)
 - **Input**: Raw candidate profiles (resumes, LinkedIn profiles)
 - **Process**: Parse and extract key information
 - **Output**: Structured candidate data
 - **Decision Points**: Resume format compatibility, data quality
 
-### Stage 3: **Eligibility Assessment**
+### Stage 3: **Eligibility Assessment** (✅ Completed)
 - **Input**: Structured candidate data, job requirements
 - **Process**: Match skills, experience, education against criteria
 - **Output**: Eligibility scores and flags
