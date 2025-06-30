@@ -20,13 +20,13 @@
 - **Output**: Eligibility scores and flags
 - **Decision Points**: Pass/fail thresholds, mandatory vs. preferred criteria
 
-### Stage 4: **Candidate Ranking & Shortlisting**
+### Stage 4: **Candidate Ranking & Shortlisting** (✅ Completed)
 - **Input**: Eligible candidates with scores
 - **Process**: Rank based on weighted criteria
 - **Output**: Shortlisted candidates
 - **Decision Points**: Shortlist size, score thresholds
 
-### Stage 5: **Automated Outreach**
+### Stage 5: **Automated Outreach** (✅ Completed)
 - **Input**: Shortlisted candidates
 - **Process**: Personalized email generation and sending
 - **Output**: Sent communications, tracking data
